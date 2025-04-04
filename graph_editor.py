@@ -1,21 +1,30 @@
 from PySide6.QtWidgets import (
     QMainWindow,
-    QWidget,
-    QVBoxLayout,
-    QSpinBox,
-    QLabel,
-    QTableWidget,
-    QPushButton,
     QTableWidgetItem,
+    QMessageBox,
 )
 from matplotlib import pyplot as plt
 
 from term_editor_dialog import TermEditor
+from ui.ui_mainWindow import Ui_MainWindow
 
 
 class GraphEditor(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.ui = Ui_MainWindow()
+        self.ui.setupUi(self)
+
+        self.ui.max_value_input.valueChanged.connect(self.generate_membership_functions)
+        self.ui.build_graph_button.clicked.connect(self.plot_graph)
+        self.ui.points_table.setHorizontalHeaderLabels(
+            [
+                "Значение X",
+                "Значение принадлежности 1",
+                "Значение принадлежности 2",
+            ],
+        )
+        self.ui.points_table.itemChanged.connect(self.on_table_value_changed)
 
         editor_dialog = TermEditor()
         if not editor_dialog.exec():
@@ -25,42 +34,69 @@ class GraphEditor(QMainWindow):
         self.terms = editor_dialog.term_names
 
         self.setWindowTitle(f"График для {self.var_name}")
-        self.initUI()
 
+        self.x_values = []
+        self.y_values_1 = []
+        self.y_values_2 = []
 
-    def initUI(self):
-        self.central_widget = QWidget()
-        self.setCentralWidget(self.central_widget)
-        self.layout = QVBoxLayout()
-
-        self.max_value_input = QSpinBox()
-        self.max_value_input.setMaximum(1000)
-        self.max_value_input.setValue(100)
-        self.max_value_input.valueChanged.connect(self.generate_membership_functions)
-        self.layout.addWidget(QLabel("Максимальное значение предметной шкалы:"))
-        self.layout.addWidget(self.max_value_input)
-
-        self.points_table = QTableWidget()
-        self.points_table.setColumnCount(3)
-        self.points_table.setHorizontalHeaderLabels(
-            [
-                "Значение X",
-                "Значение принадлежности 1",
-                "Значение принадлежности 2",
-            ],
-        )
-        self.layout.addWidget(self.points_table)
-
-        self.build_graph_button = QPushButton("Построить график")
-        self.build_graph_button.clicked.connect(self.plot_graph)
-        self.layout.addWidget(self.build_graph_button)
-
-        self.central_widget.setLayout(self.layout)
         self.generate_membership_functions()
 
+    def on_table_value_changed(self, item: QTableWidgetItem):
+        if not self.x_values or not self.y_values_1 or not self.y_values_2:
+            return
+
+        new_value = int(item.text())
+        row_index = item.row()
+
+        if item.column() == 0:
+            try:
+                if new_value < 0 or new_value > self.ui.max_value_input.value():
+                    raise ValueError("Недопустимое значение x!")
+                self.x_values[row_index] = new_value
+            except ValueError as e:
+                QMessageBox.warning(
+                    self,
+                    "Ошибка полноты покрытия",
+                    str(e),
+                )
+                item.setText(str(self.x_values[item.row()]))
+
+        elif item.column() == 1:
+            try:
+                if new_value < 0 or new_value > 1:
+                    raise ValueError("Недопустимое значение y1!")
+                if new_value + self.y_values_2[row_index] != 1:
+                    raise ValueError(
+                        f"Внимание! Для x={self.x_values[row_index]} сумма функций принадлежности не равна 1.",
+                    )
+                self.y_values_1[row_index] = new_value
+            except ValueError as e:
+                QMessageBox.warning(
+                    self,
+                    "Ошибка полноты покрытия",
+                    str(e),
+                )
+                item.setText(str(self.y_values_1[item.row()]))
+        elif item.column() == 2:
+            try:
+                if new_value < 0 or new_value > 1:
+                    raise ValueError("Недопустимое значение y2!")
+                if self.y_values_1[row_index] + new_value != 1:
+                    raise ValueError(
+                        f"Внимание! Для x={self.x_values[row_index]} сумма функций принадлежности не равна 1.",
+                    )
+                self.y_values_2[row_index] = new_value
+            except ValueError as e:
+                QMessageBox.warning(
+                    self,
+                    "Ошибка полноты покрытия",
+                    str(e),
+                )
+                item.setText(str(self.y_values_2[item.row()]))
+
     def generate_membership_functions(self):
-        self.points_table.setRowCount(0)
-        max_val = self.max_value_input.value()
+        self.ui.points_table.setRowCount(0)
+        max_val = self.ui.max_value_input.value()
 
         step = max_val / (len(self.terms) * 2)
         x_values = [round(i * step) for i in range(len(self.terms) * 2)]
@@ -72,11 +108,11 @@ class GraphEditor(QMainWindow):
         ]
 
         for x, y1, y2 in zip(x_values, y_values_1, y_values_2):
-            row = self.points_table.rowCount()
-            self.points_table.insertRow(row)
-            self.points_table.setItem(row, 0, QTableWidgetItem(str(x)))
-            self.points_table.setItem(row, 1, QTableWidgetItem(str(y1)))
-            self.points_table.setItem(row, 2, QTableWidgetItem(str(y2)))
+            row = self.ui.points_table.rowCount()
+            self.ui.points_table.insertRow(row)
+            self.ui.points_table.setItem(row, 0, QTableWidgetItem(str(x)))
+            self.ui.points_table.setItem(row, 1, QTableWidgetItem(str(y1)))
+            self.ui.points_table.setItem(row, 2, QTableWidgetItem(str(y2)))
 
         self.x_values = x_values
         self.y_values_1 = y_values_1
@@ -84,9 +120,7 @@ class GraphEditor(QMainWindow):
 
     def plot_graph(self):
         plt.figure()
-        # plt.fill_between(self.x_values, self.y_values_1, color="skyblue", alpha=0.4, label="График 1")
         plt.plot(self.x_values, self.y_values_1, marker='o', linestyle='-', color="b", label="График 1")
-        # plt.fill_between(self.x_values, self.y_values_2, color="salmon", alpha=0.4, label="График 2")
         plt.plot(self.x_values, self.y_values_2, marker='o', linestyle='-', color="r", label="График 2")
         plt.xlabel("Предметная шкала")
         plt.ylabel("Функция принадлежности")

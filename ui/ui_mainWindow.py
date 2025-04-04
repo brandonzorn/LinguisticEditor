@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'mainWindowoZRtAQ.ui'
+## Form generated from reading UI file 'mainWindowGTNTyc.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.9.0
 ##
@@ -45,7 +45,6 @@ class Ui_MainWindow(object):
             self.points_table.setColumnCount(3)
         self.points_table.setObjectName(u"points_table")
         self.points_table.setColumnCount(3)
-        self.points_table.horizontalHeader().setVisible(True)
 
         self.verticalLayout.addWidget(self.points_table)
 
