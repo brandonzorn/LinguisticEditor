@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 from PySide6.QtWidgets import (
     QMainWindow,
     QTableWidgetItem,
@@ -17,13 +19,7 @@ class GraphEditor(QMainWindow):
 
         self.ui.max_value_input.valueChanged.connect(self.generate_membership_functions)
         self.ui.build_graph_button.clicked.connect(self.plot_graph)
-        self.ui.points_table.setHorizontalHeaderLabels(
-            [
-                "Значение X",
-                "Значение принадлежности 1",
-                "Значение принадлежности 2",
-            ],
-        )
+        self.ui.points_table.setHorizontalHeaderLabels(["X1 (0)", "X2 (1)", "X3 (1)", "X4 (0)"])
         self.ui.points_table.itemChanged.connect(self.on_table_value_changed)
 
         editor_dialog = TermEditor()
@@ -31,97 +27,124 @@ class GraphEditor(QMainWindow):
             return
 
         self.var_name = editor_dialog.ui.var_name.text()
-        self.terms = editor_dialog.term_names
+        self.term_names = editor_dialog.term_names
 
         self.setWindowTitle(f"График для {self.var_name}")
 
-        self.x_values = []
-        self.y_values_1 = []
-        self.y_values_2 = []
+        self.term_points = []
 
         self.generate_membership_functions()
 
     def on_table_value_changed(self, item: QTableWidgetItem):
-        if not self.x_values or not self.y_values_1 or not self.y_values_2:
-            return
-
-        new_value = int(item.text())
         row_index = item.row()
+        col_index = item.column()
 
-        if item.column() == 0:
-            try:
-                if new_value < 0 or new_value > self.ui.max_value_input.value():
-                    raise ValueError("Недопустимое значение x!")
-                self.x_values[row_index] = new_value
-            except ValueError as e:
-                QMessageBox.warning(
-                    self,
-                    "Ошибка полноты покрытия",
-                    str(e),
-                )
-                item.setText(str(self.x_values[item.row()]))
+        previous_value = self.term_points[row_index][col_index][0]
+        new_value = int(item.text())
 
-        elif item.column() == 1:
-            try:
-                if new_value < 0 or new_value > 1:
-                    raise ValueError("Недопустимое значение y1!")
-                if new_value + self.y_values_2[row_index] != 1:
-                    raise ValueError(
-                        f"Внимание! Для x={self.x_values[row_index]} сумма функций принадлежности не равна 1.",
-                    )
-                self.y_values_1[row_index] = new_value
-            except ValueError as e:
+        if new_value < 0 or new_value > self.ui.max_value_input.value():
+            QMessageBox.warning(
+                self,
+                "Ошибка полноты покрытия",
+                str("Недопустимое значение x!"),
+            )
+            item.setText(str(self.term_points[row_index][col_index][0]))
+            return
+        self.term_points[row_index][col_index][0] = new_value
+
+        sums = defaultdict(int)
+        for segment in self.term_points:
+            for point in segment:
+                if point is not None:
+                    x, y = point
+                    sums[x] += y
+
+        for key, value in sums.items():
+            if value != 1:
                 QMessageBox.warning(
                     self,
                     "Ошибка полноты покрытия",
-                    str(e),
+                    str(f"Внимание! Для x={key} сумма функций принадлежности не равна 1.",),
                 )
-                item.setText(str(self.y_values_1[item.row()]))
-        elif item.column() == 2:
-            try:
-                if new_value < 0 or new_value > 1:
-                    raise ValueError("Недопустимое значение y2!")
-                if self.y_values_1[row_index] + new_value != 1:
-                    raise ValueError(
-                        f"Внимание! Для x={self.x_values[row_index]} сумма функций принадлежности не равна 1.",
-                    )
-                self.y_values_2[row_index] = new_value
-            except ValueError as e:
-                QMessageBox.warning(
-                    self,
-                    "Ошибка полноты покрытия",
-                    str(e),
-                )
-                item.setText(str(self.y_values_2[item.row()]))
+                self.term_points[row_index][col_index][0] = previous_value
+                item.setText(str(self.term_points[row_index][col_index][0]))
+                return
 
     def generate_membership_functions(self):
-        self.ui.points_table.setRowCount(0)
+        terms_count = len(self.term_names)
         max_val = self.ui.max_value_input.value()
 
-        step = max_val / (len(self.terms) * 2)
-        x_values = [round(i * step) for i in range(len(self.terms) * 2)]
-        y_values_1 = [
-            int((i // 2) % 2 == 0) for i, x in enumerate(x_values)
-        ]
-        y_values_2 = [
-            int(not ((i // 2) % 2 == 0)) for i, x in enumerate(x_values)
-        ]
+        if terms_count < 2:
+            raise ValueError("Количество термов должно быть минимум 2.")
 
-        for x, y1, y2 in zip(x_values, y_values_1, y_values_2):
+        step = max_val // (2 * terms_count)
+
+        self.term_points.clear()
+
+        for i in range(terms_count):
+            if i == 0:
+                x2 = 0
+                x3 = step
+                x4 = step * 2
+                term_points = [
+                    None,
+                    [x2, 1],
+                    [x3, 1],
+                    [x4, 0],
+                ]
+            elif i == terms_count - 1:
+                x1 = step * (2 * i - 1)
+                x2 = step * (2 * i)
+                x3 = step * (2 * i + 1)
+                term_points = [
+                    [x1, 0],
+                    [x2, 1],
+                    [x3, 1],
+                    None,
+                ]
+            else:
+                x1 = step * (2 * i - 1)
+                x2 = step * (2 * i)
+                x3 = step * (2 * i + 1)
+                x4 = step * (2 * i + 2)
+                term_points = [
+                    [x1, 0],
+                    [x2, 1],
+                    [x3, 1],
+                    [x4, 0],
+                ]
+
+            self.term_points.append(term_points)
+        self.fill_points_table()
+
+    def fill_points_table(self):
+        self.ui.points_table.setRowCount(0)
+
+        for i, points in enumerate(self.term_points):
             row = self.ui.points_table.rowCount()
             self.ui.points_table.insertRow(row)
-            self.ui.points_table.setItem(row, 0, QTableWidgetItem(str(x)))
-            self.ui.points_table.setItem(row, 1, QTableWidgetItem(str(y1)))
-            self.ui.points_table.setItem(row, 2, QTableWidgetItem(str(y2)))
+            if i == 0:
+                self.ui.points_table.setItem(row, 2, QTableWidgetItem(str(points[2][0])))
+                self.ui.points_table.setItem(row, 3, QTableWidgetItem(str(points[3][0])))
+            elif i == len(self.term_points) - 1:
+                self.ui.points_table.setItem(row, 0, QTableWidgetItem(str(points[0][0])))
+                self.ui.points_table.setItem(row, 1, QTableWidgetItem(str(points[1][0])))
+            else:
+                self.ui.points_table.setItem(row, 0, QTableWidgetItem(str(points[0][0])))
+                self.ui.points_table.setItem(row, 1, QTableWidgetItem(str(points[1][0])))
+                self.ui.points_table.setItem(row, 2, QTableWidgetItem(str(points[2][0])))
+                self.ui.points_table.setItem(row, 3, QTableWidgetItem(str(points[3][0])))
 
-        self.x_values = x_values
-        self.y_values_1 = y_values_1
-        self.y_values_2 = y_values_2
 
     def plot_graph(self):
         plt.figure()
-        plt.plot(self.x_values, self.y_values_1, marker='o', linestyle='-', color="b", label="График 1")
-        plt.plot(self.x_values, self.y_values_2, marker='o', linestyle='-', color="r", label="График 2")
+
+        for i, term in enumerate(self.term_points):
+            term = [i for i in term if i]
+            x, y = zip(*term)
+
+            plt.plot(x, y, marker='o', label=f"Терм {i + 1}")
+
         plt.xlabel("Предметная шкала")
         plt.ylabel("Функция принадлежности")
         plt.legend()
